@@ -1,0 +1,58 @@
+services:
+  ctfd:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://ctfd:ctfd@mariadb/ctfd
+      REDIS_URL: redis://redis:6379
+      WORKERS: "1"
+      TERRITORY_DEVICE_SECRET: ${TERRITORY_DEVICE_SECRET:?set this in .env}
+      TERRITORY_DEFENSE_MULTIPLIER: ${TERRITORY_DEFENSE_MULTIPLIER:-1}
+      TERRITORY_ATTACK_MULTIPLIER: ${TERRITORY_ATTACK_MULTIPLIER:-2}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+  territory-worker:
+    build: .
+    command: python -m CTFd.plugins.territory_control.worker
+    environment:
+      DATABASE_URL: mysql+pymysql://ctfd:ctfd@mariadb/ctfd
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      mariadb:
+        condition: service_healthy
+  serial-bridge:
+    build:
+      context: .
+      dockerfile: example/Dockerfile
+    environment:
+      TERRITORY_API_URL: http://ctfd:8000
+      TERRITORY_DEVICE_SECRET: ${TERRITORY_DEVICE_SECRET:?set this in .env}
+      SERIAL_PORT: ${SERIAL_PORT:-/dev/ttyUSB0}
+      SERIAL_BAUD: ${SERIAL_BAUD:-115200}
+    devices:
+      - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
+    depends_on:
+      - ctfd
+  mariadb:
+    image: mariadb:11
+    environment:
+      MYSQL_DATABASE: ctfd
+      MYSQL_USER: ctfd
+      MYSQL_PASSWORD: ctfd
+      MYSQL_ROOT_PASSWORD: ctfd-root
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  mariadb-data:
