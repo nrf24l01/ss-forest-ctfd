@@ -1,28 +1,21 @@
 (() => {
   const rewardsUrl = "/api/v1/territory-control/challenge-rewards";
 
-  const showAttackPoints = async challenge => {
-    const rewards = await (await fetch(rewardsUrl)).json();
-    const attackPoints = rewards[challenge.id];
-    if (attackPoints !== undefined) challenge.value = `${attackPoints} AP`;
-    return challenge;
-  };
+  fetch(rewardsUrl)
+    .then(response => response.ok ? response.json() : {})
+    .then(rewards => {
+      const renderChallengeRewards = () => {
+        for (const [id, attackPoints] of Object.entries(rewards)) {
+          const value = document.querySelector(`button.challenge-button[value="${id}"] .challenge-inner span`);
+          if (value) value.textContent = `${attackPoints} AP`;
+        }
+      };
 
-  const decorateChallengePages = () => {
-    const challengePages = window.CTFd && window.CTFd.pages;
-    if (!challengePages || challengePages.territoryControlDecorated) return;
-    challengePages.territoryControlDecorated = true;
-    const getChallenges = challengePages.challenges.getChallenges;
-    challengePages.challenges.getChallenges = async (...args) => {
-      const challenges = await getChallenges(...args);
-      return Promise.all(challenges.map(showAttackPoints));
-    };
-
-    const getChallenge = challengePages.challenge.getChallenge;
-    challengePages.challenge.getChallenge = async (...args) => showAttackPoints(await getChallenge(...args));
-  };
-
-  document.addEventListener("DOMContentLoaded", decorateChallengePages);
+      renderChallengeRewards();
+      // The CTFd challenge board is rendered asynchronously after this plugin script.
+      new MutationObserver(renderChallengeRewards).observe(document.body, { childList: true, subtree: true });
+    })
+    .catch(() => {});
 
   fetch("/api/v1/territory-control/me", { credentials: "same-origin" })
     .then(response => response.ok ? response.json() : null)
