@@ -17,7 +17,7 @@ services:
         condition: service_started
   territory-worker:
     build: .
-    command: python -m CTFd.plugins.territory_control.worker
+    entrypoint: ["python", "-m", "CTFd.plugins.territory_control.worker"]
     environment:
       DATABASE_URL: mysql+pymysql://ctfd:ctfd@mariadb/ctfd
       REDIS_URL: redis://redis:6379

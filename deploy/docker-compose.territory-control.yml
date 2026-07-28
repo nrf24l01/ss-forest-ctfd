@@ -1,13 +1,14 @@
 services:
   ctfd:
     environment:
+      WORKERS: "2"
       TERRITORY_DEVICE_SECRET: ${TERRITORY_DEVICE_SECRET}
       TERRITORY_DEFENSE_MULTIPLIER: ${TERRITORY_DEFENSE_MULTIPLIER:-1}
       TERRITORY_ATTACK_MULTIPLIER: ${TERRITORY_ATTACK_MULTIPLIER:-2}
   territory-worker:
     build: .
     restart: always
-    command: python -m CTFd.plugins.territory_control.worker
+    entrypoint: ["python", "-m", "CTFd.plugins.territory_control.worker"]
     environment:
       DATABASE_URL: mysql+pymysql://ctfd:ctfd@db/ctfd
       REDIS_URL: redis://cache:6379
