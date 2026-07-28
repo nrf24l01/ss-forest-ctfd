@@ -151,6 +151,13 @@ def load(app):
             attack_points=str(identity.attack_points),
         )
 
+    @app.get("/api/v1/territory-control/challenge-rewards")
+    def territory_challenge_rewards():
+        return jsonify({
+            challenge.id: str(challenge.attack_points)
+            for challenge in TerritoryChallenge.query.all()
+        })
+
     @app.get("/api/v1/territory-control/me/qr")
     def territory_qr():
         team = current_team_or_403()
