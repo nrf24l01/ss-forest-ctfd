@@ -92,6 +92,8 @@ class TerritoryControlChallenge(CTFdStandardChallenge):
         mutable = dict(data)
         mutable["value"] = 0
         mutable["attack_points"] = attack_points
+        # CTFd's challenge modal embeds this as JavaScript; NULL renders invalid code.
+        mutable["max_attempts"] = mutable.get("max_attempts") or 0
         # BaseChallenge reads the request itself. Instantiate directly to avoid mutating Flask input.
         challenge = cls.challenge_model(**mutable)
         db.session.add(challenge)
