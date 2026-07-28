@@ -2,6 +2,8 @@
 
 CTFd plugin implementing team Attack Points, physical-device territory attacks, and periodic official-score awards.
 
+See [DEPLOYMENT.md](DEPLOYMENT.md) for installation, device-driver setup, player/admin workflows, and troubleshooting.
+
 ## Run with Docker
 
 1. Copy `.env.example` to `.env` and replace `TERRITORY_DEVICE_SECRET` with a long random value: `cp .env.example .env`.
