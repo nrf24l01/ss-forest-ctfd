@@ -1,4 +1,13 @@
+{% extends "admin/challenges/update.html" %}
+
+{% block value %}
 <div class="form-group">
   <label>Attack Points</label>
   <input class="form-control" name="attack_points" type="number" min="0" step="0.0001" value="{{ challenge.attack_points }}" required>
+  <small class="form-text text-muted">This challenge has no Final Score value.</small>
 </div>
+{% endblock %}
+
+{% block type %}
+<input type="hidden" value="territory" name="type" id="chaltype">
+{% endblock %}

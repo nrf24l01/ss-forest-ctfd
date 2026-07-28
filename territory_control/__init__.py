@@ -8,7 +8,7 @@ import qrcode
 from flask import abort, jsonify, request, render_template_string, send_file
 from sqlalchemy.exc import IntegrityError
 
-from CTFd.models import db
+from CTFd.models import Challenges, Solves, db
 from CTFd.plugins.challenges import CHALLENGE_CLASSES, CTFdStandardChallenge
 from CTFd.utils.user import get_current_team
 from CTFd.utils.decorators import admins_only
@@ -286,6 +286,23 @@ def load(app):
                 db.session.rollback()
                 return render_template_string(ADMIN_TEMPLATE, territories=Territory.query.all(), error=str(error)), 400
         return render_template_string(ADMIN_TEMPLATE, territories=Territory.query.order_by(Territory.name).all(), error=None)
+
+    @app.post("/admin/territory-control/challenges/<int:challenge_id>/convert")
+    @admins_only
+    def convert_challenge(challenge_id):
+        """Convert an unsolved standard challenge created before the type-template fix."""
+        challenge = Challenges.query.filter_by(id=challenge_id, type="standard").with_for_update().first_or_404()
+        if Solves.query.filter_by(challenge_id=challenge.id).count():
+            return jsonify(error="Solved challenges cannot be converted safely"), 409
+        try:
+            attack_points = points(request.form.get("attack_points"), "attack_points")
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+        challenge.type = "territory"
+        challenge.value = 0
+        db.session.add(TerritoryChallenge(id=challenge.id, attack_points=attack_points))
+        db.session.commit()
+        return jsonify(id=challenge.id, type="territory", attack_points=str(attack_points))
 
 
 ADMIN_TEMPLATE = """<!doctype html><title>Territory Control</title>
