@@ -13,7 +13,7 @@ from CTFd.plugins.challenges import CHALLENGE_CLASSES, CTFdStandardChallenge
 from CTFd.utils.user import get_current_team
 from CTFd.utils.decorators import admins_only
 
-from .models import CaptureSession, TeamIdentity, Territory, TerritoryChallenge
+from .models import CaptureSession, DeviceCommand, TeamIdentity, Territory, TerritoryChallenge
 
 
 BLACK = "000000"
@@ -179,7 +179,33 @@ def load(app):
         )
         db.session.add(session)
         db.session.commit()
+        # Persist the command so driver and CTFd can run in different processes/hosts.
+        db.session.add(DeviceCommand(
+            node_id=territory.node_id,
+            command_type="start_scan",
+            payload={
+            "session_id": session.id,
+            "expires_at": session.expires_at.isoformat(),
+            },
+        ))
+        db.session.commit()
         return jsonify(session_id=session.id, node_id=territory.node_id, expires_at=session.expires_at.isoformat())
+
+    @app.get("/api/v1/territory-control/device/commands")
+    def device_commands():
+        """Short-poll command channel for the standalone territory device driver."""
+        secret = os.getenv("TERRITORY_DEVICE_SECRET")
+        if not secret or request.headers.get("X-Territory-Secret") != secret:
+            abort(403)
+        node_id = request.args.get("node_id", "").strip()
+        if not node_id:
+            return jsonify(error="node_id is required"), 400
+        command = DeviceCommand.query.filter_by(node_id=node_id, delivered_at=None).order_by(DeviceCommand.id).with_for_update().first()
+        if command is None:
+            return ("", 204)
+        command.delivered_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify(id=command.id, type=command.command_type, **command.payload)
 
     @app.post("/api/v1/territory-control/device/scans")
     def device_scan():

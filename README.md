@@ -9,13 +9,22 @@ CTFd plugin implementing team Attack Points, physical-device territory attacks, 
 3. Open `http://localhost:8000`, complete CTFd setup, then create territories at `/admin/territory-control`.
 4. Create challenges with type **Territory Attack Points**. Their `Attack Points` field credits team AP; their CTFd value is always zero.
 
-The `serial-bridge` service requires a real `SERIAL_PORT`. For development without physical hardware, omit that service:
+The `territory-device-driver` service requires a real `SERIAL_PORT` and `TERRITORY_NODE_ID`. For development without physical hardware, omit that service:
 
 ```sh
 docker compose up --build ctfd territory-worker mariadb redis
 ```
 
 ## Device protocol
+
+The CTFd plugin and serial-controller driver are separate processes. They use an authenticated, database-backed HTTP command channel, which is compatible with the stock CTFd Gunicorn deployment without requiring a WebSocket server:
+
+1. The driver polls `GET /api/v1/territory-control/device/commands?node_id=<node>`.
+2. Starting an attack queues a `start_scan` command for that node.
+3. The driver sends its configured scan command to the physical root controller.
+4. A root `UUID_REQUEST` is posted back to CTFd, and the returned color is written to serial.
+
+Run the independent driver from `territory_device_driver/`; it does not import CTFd or share its filesystem.
 
 The root/device emits:
 

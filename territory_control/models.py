@@ -48,6 +48,16 @@ class CaptureSession(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
 
 
+class DeviceCommand(db.Model):
+    __tablename__ = "territory_control_device_commands"
+    id = db.Column(db.Integer, primary_key=True)
+    node_id = db.Column(db.String(128), nullable=False, index=True)
+    command_type = db.Column(db.String(32), nullable=False)
+    payload = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+
+
 class TerritoryAward(db.Model):
     __tablename__ = "territory_control_awards"
     id = db.Column(db.Integer, primary_key=True)
