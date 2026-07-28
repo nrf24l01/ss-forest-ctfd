@@ -76,7 +76,13 @@ class TerritoryControlChallenge(CTFdStandardChallenge):
         "update": "/plugins/territory_control/assets/challenge-update.html",
         "view": "/plugins/territory_control/assets/challenge-view.html",
     }
-    scripts = {}
+    # CTFd's API requires create/update/view keys even when the templates
+    # inherit the standard challenge views.
+    scripts = {
+        "create": "/plugins/challenges/assets/create.js",
+        "update": "/plugins/challenges/assets/update.js",
+        "view": "/plugins/challenges/assets/view.js",
+    }
 
     @classmethod
     def create(cls, request):
