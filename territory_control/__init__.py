@@ -127,25 +127,43 @@ class TerritoryControlChallenge(CTFdStandardChallenge):
 
 
 def load(app):
-    from CTFd.plugins import register_plugin_assets_directory
+    from CTFd.plugins import register_plugin_assets_directory, register_user_page_menu_bar
 
     app.db.create_all()
     CHALLENGE_CLASSES[TerritoryControlChallenge.id] = TerritoryControlChallenge
     register_plugin_assets_directory(app, base_path="/plugins/territory_control/assets/")
+    register_user_page_menu_bar("Territory Control", "/territory-control")
+
+    @app.after_request
+    def inject_territory_profile_ui(response):
+        if response.content_type.startswith("text/html") and response.status_code == 200:
+            body = response.get_data(as_text=True)
+            if "</body>" in body:
+                body = body.replace(
+                    "</body>",
+                    '<script src="/plugins/territory_control/assets/profile-ui.js"></script></body>',
+                )
+                response.set_data(body)
+        return response
 
     @app.get("/api/v1/territory-control/me")
     def territory_me():
         team = current_team_or_403()
         identity = identity_for(team.id)
         db.session.commit()
-        return jsonify(uuid=identity.uuid, color=identity.color, attack_points=str(identity.attack_points))
+        return jsonify(
+            uuid=identity.uuid,
+            qr_uri=f"ss-forest://{identity.uuid}",
+            color=identity.color,
+            attack_points=str(identity.attack_points),
+        )
 
     @app.get("/api/v1/territory-control/me/qr")
     def territory_qr():
         team = current_team_or_403()
         identity = identity_for(team.id)
         db.session.commit()
-        image = qrcode.make(identity.uuid)
+        image = qrcode.make(f"ss-forest://{identity.uuid}")
         output = BytesIO()
         image.save(output, "PNG")
         output.seek(0)
