@@ -7,7 +7,8 @@
       const renderChallengeRewards = () => {
         for (const [id, attackPoints] of Object.entries(rewards)) {
           const value = document.querySelector(`button.challenge-button[value="${id}"] .challenge-inner span`);
-          if (value) value.textContent = `${attackPoints} AP`;
+          const label = `${attackPoints} AP`;
+          if (value && value.textContent !== label) value.textContent = label;
         }
       };
 
