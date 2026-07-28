@@ -127,24 +127,17 @@ class TerritoryControlChallenge(CTFdStandardChallenge):
 
 
 def load(app):
-    from CTFd.plugins import register_plugin_assets_directory, register_user_page_menu_bar
+    from CTFd.plugins import (
+        register_plugin_assets_directory,
+        register_plugin_script,
+        register_user_page_menu_bar,
+    )
 
     app.db.create_all()
     CHALLENGE_CLASSES[TerritoryControlChallenge.id] = TerritoryControlChallenge
     register_plugin_assets_directory(app, base_path="/plugins/territory_control/assets/")
+    register_plugin_script("/plugins/territory_control/assets/profile-ui.js")
     register_user_page_menu_bar("Territory Control", "/territory-control")
-
-    @app.after_request
-    def inject_territory_profile_ui(response):
-        if response.content_type.startswith("text/html") and response.status_code == 200:
-            body = response.get_data(as_text=True)
-            if "</body>" in body:
-                body = body.replace(
-                    "</body>",
-                    '<script src="/plugins/territory_control/assets/profile-ui.js"></script></body>',
-                )
-                response.set_data(body)
-        return response
 
     @app.get("/api/v1/territory-control/me")
     def territory_me():
