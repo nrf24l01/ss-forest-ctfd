@@ -1,0 +1,15 @@
+services:
+  service:
+    image: silctf/flock-telemetry:local
+    expose:
+      - "6006"
+    environment:
+      CTF_FLAG: ${FLAG}
+    restart: unless-stopped
+    networks:
+      - net
+
+networks:
+  net:
+    external:
+      name: ctfd_frp_containers

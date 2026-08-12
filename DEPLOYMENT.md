@@ -119,6 +119,73 @@ On the player challenge board, these challenges display their reward as `<count>
 
 Do not create AP challenges as the normal `standard` type. Standard challenge solves do not credit AP.
 
+## Deploy personal challenge instances
+
+`territory_owl` adds personal, team-scoped challenge containers. Its challenges
+award normal CTFd team score and validate a per-instance `silCTF{...}` flag.
+
+Copy the plugin into an existing CTFd installation at:
+
+```text
+CTFd/plugins/territory_owl/
+```
+
+For the repository deployment, create the ignored runtime directories and FRP
+configuration files:
+
+```sh
+mkdir -p territory_owl_runtime/templates territory_owl_runtime/run deploy/territory_owl
+```
+
+`deploy/territory_owl/frps.ini` must contain the configured token:
+
+```ini
+[common]
+bind_port = 7000
+token = <TERRITORY_OWL_FRP_TOKEN>
+```
+
+`deploy/territory_owl/frpc.ini` must contain the same token and start with:
+
+```ini
+[common]
+token = <TERRITORY_OWL_FRP_TOKEN>
+server_addr = territory-owl-frps
+server_port = 7000
+admin_addr = 0.0.0.0
+admin_port = 7400
+```
+
+Add one directory per challenge under `territory_owl_runtime/templates/`. Every
+template must include a `docker-compose.yml` that joins the network named by
+`TERRITORY_OWL_CONTAINERS_NETWORK` (default: `territory_owl_containers`). The
+template receives the generated flag as `FLAG` in its `.env` file.
+
+Set these private deployment variables in `.env`:
+
+```dotenv
+TERRITORY_OWL_PUBLIC_HOST=ctfd.example.org
+TERRITORY_OWL_FRP_TOKEN=<random-secret>
+TERRITORY_OWL_FRP_IMAGE=fatedier/frp:v0.38.0
+TERRITORY_OWL_PORT_START=42100
+TERRITORY_OWL_PORT_END=42199
+TERRITORY_OWL_MAX_INSTANCES_PER_TEAM=1
+TERRITORY_OWL_INSTANCE_TTL_SECONDS=3600
+```
+
+Start the overlay:
+
+```sh
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/docker-compose.territory-owl.yml \
+  up -d --build ctfd territory-owl-frps territory-owl-frpc territory-owl-cleanup
+```
+
+The cleanup service stops expired containers every minute. With the default
+limit, each team may have one active instance; launching the same challenge
+returns its existing instance.
+
 ## Run the independent device driver
 
 The driver does not import CTFd or share CTFd's filesystem. It needs network access to the CTFd API and access to the serial port.
