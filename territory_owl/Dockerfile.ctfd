@@ -1,0 +1,8 @@
+FROM ctfd/ctfd:3.8.6
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker-compose \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir 'qrcode[pil]>=7.4'

@@ -1,0 +1,4 @@
+FROM alpine:3.23
+
+COPY deploy/territory_owl/frpc deploy/territory_owl/frps /usr/local/bin/
+RUN chmod 0555 /usr/local/bin/frpc /usr/local/bin/frps

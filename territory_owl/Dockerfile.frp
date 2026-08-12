@@ -1,0 +1,7 @@
+FROM alpine:3.20
+
+RUN apk add --no-cache curl tar \
+    && curl -fsSL https://github.com/fatedier/frp/releases/download/v0.38.0/frp_0.38.0_linux_amd64.tar.gz \
+       | tar -xz -C /tmp \
+    && install -m 0555 /tmp/frp_0.38.0_linux_amd64/frpc /tmp/frp_0.38.0_linux_amd64/frps /usr/local/bin/ \
+    && rm -rf /tmp/frp_0.38.0_linux_amd64

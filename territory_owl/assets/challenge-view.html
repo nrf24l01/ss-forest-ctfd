@@ -1,0 +1,12 @@
+{% extends "challenge.html" %}
+
+{% block value %}
+<div class="alert alert-info">Решение приносит {{ attack_points }} очков команде.</div>
+{% endblock %}
+
+{% block input %}
+<div class="card my-3">
+  <div class="card-body text-center" id="territory-owl-panel">Загрузка инстанса...</div>
+</div>
+{{ super() }}
+{% endblock %}

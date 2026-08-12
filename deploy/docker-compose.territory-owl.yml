@@ -1,0 +1,80 @@
+services:
+  ctfd:
+    user: root
+    environment:
+      TERRITORY_OWL_RUNTIME_ROOT: /opt/CTFd/territory_owl_runtime
+      TERRITORY_OWL_DOCKER_HOST: unix:///var/run/docker.sock
+      TERRITORY_OWL_PORT_START: ${TERRITORY_OWL_PORT_START:-42100}
+      TERRITORY_OWL_PORT_END: ${TERRITORY_OWL_PORT_END:-42199}
+      TERRITORY_OWL_MAX_INSTANCES_PER_TEAM: ${TERRITORY_OWL_MAX_INSTANCES_PER_TEAM:-1}
+      TERRITORY_OWL_INSTANCE_TTL_SECONDS: ${TERRITORY_OWL_INSTANCE_TTL_SECONDS:-3600}
+      TERRITORY_OWL_PUBLIC_HOST: ${TERRITORY_OWL_PUBLIC_HOST:?set the public host in .env}
+      TERRITORY_OWL_FRP_TOKEN: ${TERRITORY_OWL_FRP_TOKEN:?set the FRP token in .env}
+      TERRITORY_OWL_FRPS_HOST: territory-owl-frps
+      TERRITORY_OWL_FRPS_PORT: "7000"
+      TERRITORY_OWL_FRPC_ADMIN: http://territory-owl-frpc:7400
+    volumes:
+      - ./territory_owl:/opt/CTFd/CTFd/plugins/territory_owl
+      - ./territory_owl_runtime:/opt/CTFd/territory_owl_runtime
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro
+    networks:
+      default: {}
+      territory-owl-control: {}
+
+  territory-owl-frps:
+    image: ${TERRITORY_OWL_FRP_IMAGE:?set the FRP image in .env}
+    command: ["frps", "-c", "/conf/frps.ini"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/territory_owl/frps.ini:/conf/frps.ini:ro
+    ports:
+      - "${TERRITORY_OWL_PORT_START:-42100}-${TERRITORY_OWL_PORT_END:-42199}:${TERRITORY_OWL_PORT_START:-42100}-${TERRITORY_OWL_PORT_END:-42199}"
+    networks:
+      territory-owl-control: {}
+
+  territory-owl-frpc:
+    image: ${TERRITORY_OWL_FRP_IMAGE:?set the FRP image in .env}
+    command: ["frpc", "-c", "/conf/frpc.ini"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/territory_owl/frpc.ini:/conf/frpc.ini
+    networks:
+      territory-owl-control: {}
+      territory-owl-containers: {}
+
+  territory-owl-cleanup:
+    build: .
+    user: root
+    entrypoint: ["python", "-m", "CTFd.plugins.territory_owl.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://ctfd:ctfd@mariadb/ctfd
+      REDIS_URL: redis://redis:6379
+      TERRITORY_OWL_RUNTIME_ROOT: /opt/CTFd/territory_owl_runtime
+      TERRITORY_OWL_DOCKER_HOST: unix:///var/run/docker.sock
+      TERRITORY_OWL_INSTANCE_TTL_SECONDS: ${TERRITORY_OWL_INSTANCE_TTL_SECONDS:-3600}
+      TERRITORY_OWL_FRP_TOKEN: ${TERRITORY_OWL_FRP_TOKEN:?set the FRP token in .env}
+      TERRITORY_OWL_FRPS_HOST: territory-owl-frps
+      TERRITORY_OWL_FRPS_PORT: "7000"
+      TERRITORY_OWL_FRPC_ADMIN: http://territory-owl-frpc:7400
+    volumes:
+      - ./territory_owl:/opt/CTFd/CTFd/plugins/territory_owl
+      - ./territory_owl_runtime:/opt/CTFd/territory_owl_runtime
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      territory-owl-frpc:
+        condition: service_started
+    networks:
+      default: {}
+      territory-owl-control: {}
+
+networks:
+  territory-owl-control: {}
+  territory-owl-containers:
+    name: ${TERRITORY_OWL_CONTAINERS_NETWORK:-territory_owl_containers}
