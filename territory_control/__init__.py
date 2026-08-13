@@ -57,7 +57,9 @@ def canonical_uuid(value):
 
 def device_authorized():
     secret = os.getenv("TERRITORY_DEVICE_SECRET")
-    return bool(secret and request.headers.get("X-Territory-Secret") == secret)
+    # Some CTFd proxy/WSGI stacks expose custom headers only through environ.
+    supplied = request.headers.get("X-Territory-Secret") or request.environ.get("HTTP_X_TERRITORY_SECRET")
+    return bool(secret and supplied == secret)
 
 
 def owner_color(territory):
