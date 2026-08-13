@@ -26,6 +26,9 @@ BLACK = "000000"
 CAPTURE_WINDOW_SECONDS = 30
 TELEGRAM_API = "https://ta.de.snnlab.ru"
 logger = logging.getLogger(__name__)
+telegram_lock = threading.Lock()
+telegram_pending = []
+telegram_timer = None
 
 
 def points(value, field="value"):
@@ -103,11 +106,30 @@ def send_telegram_message(text, token, recipients):
             logger.exception("Telegram notification failed for configured recipient")
 
 
+def flush_telegram_messages():
+    global telegram_timer
+    with telegram_lock:
+        pending = telegram_pending[:]
+        telegram_pending.clear()
+        telegram_timer = None
+    if not pending:
+        return
+    token, recipients, messages = pending[0][0], pending[0][1], [item[2] for item in pending]
+    send_telegram_message("Territory updates\n\n" + "\n\n".join(messages), token, recipients)
+
+
 def queue_telegram_message(text):
+    global telegram_timer
     token = setting_value("telegram_bot_token").strip()
     recipients = [item.strip() for item in setting_value("telegram_recipient_ids").replace(",", "\n").splitlines() if item.strip()]
-    if token and recipients:
-        threading.Thread(target=send_telegram_message, args=(text, token, recipients), daemon=True).start()
+    if not token or not recipients:
+        return
+    with telegram_lock:
+        telegram_pending.append((token, recipients, text))
+        if telegram_timer is None:
+            telegram_timer = threading.Timer(5, flush_telegram_messages)
+            telegram_timer.daemon = True
+            telegram_timer.start()
 
 
 def team_status_rows(teams, territories):
@@ -374,11 +396,9 @@ def load(app):
         queue_telegram_message(
             f"Territory attack\n"
             f"Node: {territory.node_id}\n"
-            f"Attack points: {attack_points}\n"
             f"Result: {result}\n"
             f"Status: {'captured' if result == 'captured' else 'not captured'}\n"
-            f"Team: {owner_name if result == 'captured' else 'unchanged'}\n"
-            f"Defense: {territory.defense_points}"
+            f"Team: {owner_name if result == 'captured' else 'unchanged'}"
         )
         return jsonify(action="color", color=response_color, result=result, defense_points=str(territory.defense_points))
 
