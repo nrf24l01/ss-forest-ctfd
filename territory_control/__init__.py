@@ -385,6 +385,7 @@ def load(app):
 
     @app.post("/admin/territory-control/territories/<int:territory_id>")
     @admins_only
+    @bypass_csrf_protection
     def update_territory(territory_id):
         territory = Territory.query.filter_by(id=territory_id).with_for_update().first_or_404()
         try:
@@ -407,6 +408,7 @@ def load(app):
 
     @app.post("/admin/territory-control/territories/<int:territory_id>/owner")
     @admins_only
+    @bypass_csrf_protection
     def force_owner(territory_id):
         territory = Territory.query.filter_by(id=territory_id).with_for_update().first_or_404()
         prior_defense = territory.defense_points
@@ -422,6 +424,7 @@ def load(app):
 
     @app.post("/admin/territory-control/teams/<int:team_id>/attack-points")
     @admins_only
+    @bypass_csrf_protection
     def adjust_attack_points(team_id):
         if Teams.query.get(team_id) is None:
             abort(404, "unknown team")
