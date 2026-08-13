@@ -490,8 +490,13 @@ input, button { padding: .5rem; font: inherit; } button { background: #0b6e4f; c
 <script>
 document.querySelector('#save-color').addEventListener('click', async event => {
   const result = document.querySelector('#result');
-  const response = await fetch('/api/v1/territory-control/me/color', { method: 'POST', headers: {'Content-Type': 'application/json', 'CSRF-Token': window.init.csrfNonce}, body: JSON.stringify({color: document.querySelector('#team-color').value}) });
-  const data = await response.json();
-  result.textContent = response.ok ? 'Team color saved.' : (data.error || 'Color could not be saved.');
+  const csrfToken = window.CTFd?.config?.csrfNonce || window.init?.csrfNonce;
+  try {
+    const response = await fetch('/api/v1/territory-control/me/color', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'CSRF-Token': csrfToken}, body: JSON.stringify({color: document.querySelector('#team-color').value}) });
+    const data = await response.json();
+    result.textContent = response.ok ? 'Team color saved.' : (data.error || `Color could not be saved (HTTP ${response.status}).`);
+  } catch (error) {
+    result.textContent = 'Color could not be saved: ' + error.message;
+  }
 });
 </script>"""
