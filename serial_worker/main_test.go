@@ -28,3 +28,10 @@ func TestTreeSnapshotParsing(t *testing.T) {
 		t.Fatalf("tree node not parsed: %#v", node)
 	}
 }
+
+func TestAttackResponseIncludesStatus(t *testing.T) {
+	response := attackResponse{Action: "status", Status: "NOT_ENOUGH_POINTS_TO_CAPTURE"}
+	if response.Status != "NOT_ENOUGH_POINTS_TO_CAPTURE" {
+		t.Fatalf("unexpected status: %q", response.Status)
+	}
+}

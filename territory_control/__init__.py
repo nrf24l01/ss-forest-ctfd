@@ -285,19 +285,19 @@ def load(app):
         try:
             attack_points = points(data.get("attack_points"), "attack_points")
         except ValueError as error:
-            return jsonify(action="reject", error=str(error)), 400
+            return jsonify(action="status", status="INVALID_ATTACK_POINTS", error=str(error)), 400
         if attack_points <= 0:
-            return jsonify(action="reject", error="attack_points must be greater than zero"), 400
+            return jsonify(action="status", status="INVALID_ATTACK_POINTS", error="attack_points must be greater than zero"), 400
         territory = Territory.query.filter_by(node_id=str(data.get("node_id", "")).lower()).with_for_update().first()
         if territory is None:
-            return jsonify(action="reject", error="unknown territory"), 404
+            return jsonify(action="status", status="UNKNOWN_TERRITORY", error="unknown territory"), 404
         scanned_uuid = canonical_uuid(data.get("uuid"))
         scanned = TeamIdentity.query.filter_by(uuid=scanned_uuid).with_for_update().first() if scanned_uuid else None
         if scanned is None:
-            return jsonify(action="reject", error="unknown team UUID"), 403
+            return jsonify(action="status", status="INVALID_TEAM_UUID", error="unknown team UUID"), 403
         identity = identity_for(scanned.team_id, lock=True)
         if identity.attack_points < attack_points:
-            return jsonify(action="reject", error="insufficient attack points"), 409
+            return jsonify(action="status", status="NOT_ENOUGH_POINTS_TO_CAPTURE", error="insufficient attack points"), 409
         identity.attack_points -= attack_points
         defense_multiplier = configured_points("TERRITORY_DEFENSE_MULTIPLIER", "1")
         attack_multiplier = configured_points("TERRITORY_ATTACK_MULTIPLIER", "2")

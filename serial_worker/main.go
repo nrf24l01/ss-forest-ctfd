@@ -31,6 +31,7 @@ type attackRequest struct {
 type attackResponse struct {
 	Action string `json:"action"`
 	Color  string `json:"color"`
+	Status string `json:"status"`
 	Error  string `json:"error"`
 }
 
@@ -76,14 +77,14 @@ func (w *worker) handle(line string) {
 	if err != nil {
 		// Do not retry an ambiguous request; retrying could spend AP twice.
 		log.Printf("attack request for %s: %v", node, err)
-		w.command(node, "reject "+node)
+		w.command(node, "status "+node+" SERVER_UNAVAILABLE")
 		return
 	}
 	defer response.Body.Close()
 	result := attackResponse{}
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		log.Printf("decode attack response for %s: %v", node, err)
-		w.command(node, "reject "+node)
+		log.Printf("decode attack response for %s (HTTP %d): %v", node, response.StatusCode, err)
+		w.command(node, "status "+node+" SERVER_ERROR")
 		return
 	}
 	if response.StatusCode >= 200 && response.StatusCode < 300 && result.Action == "color" && rgb.MatchString(strings.ToLower(result.Color)) {
@@ -91,8 +92,13 @@ func (w *worker) handle(line string) {
 		log.Printf("%s: %s -> #%s", node, result.Action, result.Color)
 		return
 	}
-	log.Printf("%s rejected: %s", node, result.Error)
-	w.command(node, "reject "+node)
+	if result.Status != "" {
+		log.Printf("%s rejected: %s", node, result.Status)
+		w.command(node, "status "+node+" "+result.Status)
+		return
+	}
+	log.Printf("%s rejected without a status: %s", node, result.Error)
+	w.command(node, "status "+node+" SERVER_ERROR")
 }
 
 func (w *worker) reportTopology(nodes []string) {
