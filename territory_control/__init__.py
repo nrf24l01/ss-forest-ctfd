@@ -392,13 +392,15 @@ def load(app):
             response_color = scanned.color
         attack_record(territory, scanned.team_id, attack_points, prior_defense, result)
         db.session.commit()
-        owner_name = Teams.query.get(scanned.team_id).name
+        attacking_team = Teams.query.get(scanned.team_id)
+        current_owner = Teams.query.get(territory.owner_team_id) if territory.owner_team_id else None
         queue_telegram_message(
             f"Territory attack\n"
             f"Node: {territory.node_id}\n"
+            f"Attacking team: {attacking_team.name if attacking_team else 'Deleted team'}\n"
             f"Result: {result}\n"
             f"Status: {'captured' if result == 'captured' else 'not captured'}\n"
-            f"Team: {owner_name if result == 'captured' else 'unchanged'}"
+            f"Current owner: {current_owner.name if current_owner else 'Neutral'}"
         )
         return jsonify(action="color", color=response_color, result=result, defense_points=str(territory.defense_points))
 
