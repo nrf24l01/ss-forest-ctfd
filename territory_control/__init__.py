@@ -10,6 +10,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from CTFd.models import Challenges, Solves, Teams, db
+from CTFd.plugins import bypass_csrf_protection
 from CTFd.plugins.challenges import CHALLENGE_CLASSES, CTFdStandardChallenge
 from CTFd.utils.user import get_current_team
 from CTFd.utils.decorators import admins_only
@@ -256,6 +257,7 @@ def load(app):
         return jsonify(color=selected_color)
 
     @app.post("/api/v1/territory-control/device/attacks")
+    @bypass_csrf_protection
     def device_attack():
         """Resolve one physical UUID_REQUEST from a trusted serial worker."""
         if not device_authorized():
@@ -304,6 +306,7 @@ def load(app):
         return jsonify(action="color", color=response_color, result=result, defense_points=str(territory.defense_points))
 
     @app.post("/api/v1/territory-control/device/topology")
+    @bypass_csrf_protection
     def device_topology():
         """Update territory availability from a complete root `tree` snapshot."""
         if not device_authorized():
