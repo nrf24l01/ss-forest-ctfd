@@ -89,3 +89,9 @@ class TerritoryPointAward(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
     attack_points = db.Column(POINTS, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class TerritorySetting(db.Model):
+    __tablename__ = "territory_control_settings"
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.Text, nullable=False, default="")
