@@ -9,7 +9,7 @@ from flask import abort, jsonify, request, render_template_string, send_file
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
-from CTFd.models import Challenges, Solves, Teams, db
+from CTFd.models import Awards, Challenges, Solves, Teams, db
 from CTFd.plugins import bypass_csrf_protection
 from CTFd.plugins.challenges import CHALLENGE_CLASSES, CTFdStandardChallenge
 from CTFd.utils.user import get_current_team
@@ -217,6 +217,22 @@ def load(app):
             qr_uri=f"ss-forest://{identity.uuid}",
             color=identity.color,
             attack_points=str(identity.attack_points),
+        )
+
+    @app.get("/api/v1/territory-control/teams/<int:team_id>/points")
+    def territory_team_points(team_id):
+        """Public scoreboard companion for a CTFd team profile."""
+        team = Teams.query.get_or_404(team_id)
+        identity = TeamIdentity.query.filter_by(team_id=team.id).first()
+        solve_points = db.session.query(db.func.coalesce(db.func.sum(Challenges.value), 0)).join(
+            Solves, Solves.challenge_id == Challenges.id
+        ).filter(Solves.team_id == team.id).scalar()
+        award_points = db.session.query(db.func.coalesce(db.func.sum(Awards.value), 0)).filter(
+            Awards.team_id == team.id
+        ).scalar()
+        return jsonify(
+            attack_points=str(identity.attack_points) if identity else "0",
+            score=int(solve_points or 0) + int(award_points or 0),
         )
 
     @app.get("/api/v1/territory-control/challenge-rewards")

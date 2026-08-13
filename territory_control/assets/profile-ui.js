@@ -18,19 +18,24 @@
     })
     .catch(() => {});
 
-  fetch("/api/v1/territory-control/me", { credentials: "same-origin" })
-    .then(response => response.ok ? response.json() : null)
+  const teamId = document.querySelector("#team-id")?.dataset.ctfdTeamId;
+  const pointsUrl = teamId
+    ? `/api/v1/territory-control/teams/${teamId}/points`
+    : "/api/v1/territory-control/me";
+
+  fetch(pointsUrl, { credentials: "same-origin" })
     .then(data => {
       if (!data) return;
       const score = document.querySelector("#team-score");
       const userScore = document.querySelector("#score-graph");
       const target = score || userScore;
-      if (!target || document.querySelector("#territory-attack-points")) return;
+      if (!target || document.querySelector("#territory-team-points")) return;
 
       const card = document.createElement("section");
-      card.id = "territory-attack-points";
+      card.id = "territory-team-points";
       card.className = "text-center mt-3";
-      card.innerHTML = `<h2>${data.attack_points} <small>Attack Points</small></h2><a href="/territory-control">Territory Control</a>`;
+      const scoreLabel = Number.isFinite(data.score) ? `${data.score} <small>CTFd Points</small>` : "";
+      card.innerHTML = `<h2>${scoreLabel}${scoreLabel ? " · " : ""}${data.attack_points} <small>Attack Points</small></h2><a href="/territory-control">Territory Control</a>`;
       target.parentElement.insertBefore(card, target.nextSibling);
     })
     .catch(() => {});
