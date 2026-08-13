@@ -127,7 +127,7 @@ def queue_telegram_message(text):
     with telegram_lock:
         telegram_pending.append((token, recipients, text))
         if telegram_timer is None:
-            telegram_timer = threading.Timer(5, flush_telegram_messages)
+            telegram_timer = threading.Timer(20, flush_telegram_messages)
             telegram_timer.daemon = True
             telegram_timer.start()
 
@@ -372,6 +372,7 @@ def load(app):
         defense_multiplier = configured_points("TERRITORY_DEFENSE_MULTIPLIER", "1")
         attack_multiplier = configured_points("TERRITORY_ATTACK_MULTIPLIER", "2")
         prior_defense = territory.defense_points
+        prior_owner = Teams.query.get(territory.owner_team_id) if territory.owner_team_id else None
         remaining = (prior_defense * defense_multiplier) - (attack_points * attack_multiplier)
         if remaining > 0:
             territory.defense_points = remaining
@@ -393,15 +394,13 @@ def load(app):
         attack_record(territory, scanned.team_id, attack_points, prior_defense, result)
         db.session.commit()
         attacking_team = Teams.query.get(scanned.team_id)
-        current_owner = Teams.query.get(territory.owner_team_id) if territory.owner_team_id else None
-        queue_telegram_message(
-            f"Territory attack\n"
-            f"Node: {territory.node_id}\n"
-            f"Attacking team: {attacking_team.name if attacking_team else 'Deleted team'}\n"
-            f"Result: {result}\n"
-            f"Status: {'captured' if result == 'captured' else 'not captured'}\n"
-            f"Current owner: {current_owner.name if current_owner else 'Neutral'}"
-        )
+        attacking_name = attacking_team.name if attacking_team else "Deleted team"
+        prior_owner_name = prior_owner.name if prior_owner else "Neutral"
+        if result == "captured":
+            notification = f"{attacking_name} captured node from {prior_owner_name}\nMAC: {territory.node_id}"
+        else:
+            notification = f"{attacking_name} tried to attack {prior_owner_name}\nMAC: {territory.node_id}"
+        queue_telegram_message(notification)
         return jsonify(action="color", color=response_color, result=result, defense_points=str(territory.defense_points))
 
     @app.post("/api/v1/territory-control/device/topology")
