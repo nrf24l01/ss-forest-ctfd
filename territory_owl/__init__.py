@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, abort, jsonify
 
 from CTFd.exceptions.challenges import ChallengeCreateException, ChallengeUpdateException
-from CTFd.models import db
+from CTFd.models import Solves, db
 from CTFd.plugins import register_plugin_assets_directory, register_plugin_script
 from CTFd.plugins.challenges import CHALLENGE_CLASSES, CTFdStandardChallenge, ChallengeResponse
 from CTFd.utils.decorators import authed_only
@@ -12,6 +12,27 @@ from CTFd.utils.user import get_current_team
 
 from . import instance_manager
 from .models import TerritoryOwlChallenge, TerritoryOwlInstance
+
+
+def award_attack_points(team_id, solve_id, attack_points):
+    """Credit an Owl solve once while CTFd continues to award native score."""
+    from CTFd.plugins.territory_control.models import TeamIdentity, TerritoryPointAward
+
+    if TerritoryPointAward.query.get(solve_id) is not None:
+        return
+    identity = TeamIdentity.query.filter_by(team_id=team_id).with_for_update().first()
+    if identity is None:
+        from hashlib import sha256
+        import uuid
+        identity = TeamIdentity(
+            team_id=team_id,
+            uuid=str(uuid.uuid4()),
+            color=f"{int(sha256(str(team_id).encode()).hexdigest()[:6], 16) | 0x404040:06x}",
+        )
+        db.session.add(identity)
+        db.session.flush()
+    identity.attack_points += attack_points
+    db.session.add(TerritoryPointAward(solve_id=solve_id, team_id=team_id, attack_points=attack_points))
 
 
 def _public_host(app):
@@ -97,6 +118,10 @@ class TerritoryOwlChallengeType(CTFdStandardChallenge):
     @classmethod
     def solve(cls, user, team, challenge, request):
         super().solve(user, team, challenge, request)
+        solve = Solves.query.filter_by(challenge_id=challenge.id, team_id=team.id).order_by(Solves.id.desc()).first()
+        if solve is not None:
+            award_attack_points(team.id, solve.id, challenge.attack_points)
+            db.session.commit()
 
     @classmethod
     def delete(cls, challenge):

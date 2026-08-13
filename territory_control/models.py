@@ -80,3 +80,12 @@ class TerritoryAttack(db.Model):
     result = db.Column(db.String(32), nullable=False)
     note = db.Column(db.String(256), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class TerritoryPointAward(db.Model):
+    """Idempotency ledger for AP credited by challenge solves."""
+    __tablename__ = "territory_control_point_awards"
+    solve_id = db.Column(db.Integer, db.ForeignKey("solves.id"), primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
+    attack_points = db.Column(POINTS, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
