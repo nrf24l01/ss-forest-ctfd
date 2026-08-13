@@ -34,6 +34,7 @@ class Territory(db.Model):
     score_interval_seconds = db.Column(db.Integer, nullable=False, default=300)
     last_awarded_at = db.Column(db.DateTime, nullable=True)
     captured_at = db.Column(db.DateTime, nullable=True)
+    last_seen_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 

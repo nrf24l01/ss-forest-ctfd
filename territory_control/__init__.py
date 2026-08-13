@@ -79,8 +79,9 @@ def attack_record(territory, team_id, attack_points, prior_defense, result, note
 def upgrade_schema():
     """Small additive migration for deployments created before capture timing existed."""
     columns = {column["name"] for column in inspect(db.engine).get_columns("territory_control_territories")}
-    if "captured_at" not in columns:
-        db.session.execute(text("ALTER TABLE territory_control_territories ADD COLUMN captured_at DATETIME"))
+    for name in ("captured_at", "last_seen_at"):
+        if name not in columns:
+            db.session.execute(text(f"ALTER TABLE territory_control_territories ADD COLUMN {name} DATETIME"))
         db.session.commit()
 
 
@@ -236,6 +237,7 @@ def load(app):
             owners=owners,
             owner_colors=owner_colors,
             now=datetime.utcnow(),
+            availability_seconds=int(os.getenv("TERRITORY_NODE_STALE_SECONDS", "90")),
         )
 
     @app.post("/api/v1/territory-control/me/color")
@@ -298,6 +300,24 @@ def load(app):
         attack_record(territory, scanned.team_id, attack_points, prior_defense, result)
         db.session.commit()
         return jsonify(action="color", color=response_color, result=result, defense_points=str(territory.defense_points))
+
+    @app.post("/api/v1/territory-control/device/topology")
+    def device_topology():
+        """Update territory availability from a complete root `tree` snapshot."""
+        if not device_authorized():
+            abort(403)
+        data = request.get_json(silent=True) or {}
+        nodes = data.get("nodes")
+        if not isinstance(nodes, list) or any(not isinstance(node, str) for node in nodes):
+            return jsonify(error="nodes must be a list of node MACs"), 400
+        now = datetime.utcnow()
+        territories = Territory.query.filter(
+            Territory.node_id.in_({node.lower() for node in nodes})
+        ).with_for_update().all()
+        for territory in territories:
+            territory.last_seen_at = now
+        db.session.commit()
+        return jsonify(updated=len(territories), observed_at=now.isoformat())
 
     @app.route("/admin/territory-control", methods=["GET", "POST"])
     @admins_only
@@ -428,7 +448,7 @@ input, button { padding: .5rem; font: inherit; } button { background: #0b6e4f; c
 </div>
 <h2>Territories</h2>
 <table><thead><tr><th>Territory</th><th>Node</th><th>Owner</th><th>Captured</th><th>Defense</th><th>CTFd yield</th></tr></thead><tbody>
-{% for territory in territories %}<tr><td>{{ territory.name }}</td><td>{{ territory.node_id }}</td><td>{% if territory.owner_team_id %}<span style="display:inline-block;width:1em;height:1em;background:#{{ owner_colors[territory.owner_team_id] }};border:1px solid #333"></span> {{ owners.get(territory.owner_team_id, 'Deleted team') }}{% else %}Neutral{% endif %}</td><td>{% if territory.captured_at %}{{ (now - territory.captured_at).total_seconds()|int }} seconds{% else %}-{% endif %}</td><td>{{ territory.defense_points }}</td><td>+{{ territory.score_amount }} / {{ territory.score_interval_seconds }}s</td></tr>{% endfor %}
+{% for territory in territories %}<tr><td>{{ territory.name }}</td><td>{{ territory.node_id }}<br><small>{% if territory.last_seen_at and (now - territory.last_seen_at).total_seconds() <= availability_seconds %}Available{% else %}Unavailable{% endif %}</small></td><td>{% if territory.owner_team_id %}<span style="display:inline-block;width:1em;height:1em;background:#{{ owner_colors[territory.owner_team_id] }};border:1px solid #333"></span> {{ owners.get(territory.owner_team_id, 'Deleted team') }}{% else %}Neutral{% endif %}</td><td>{% if territory.captured_at %}{{ (now - territory.captured_at).total_seconds()|int }} seconds{% else %}-{% endif %}</td><td>{{ territory.defense_points }}</td><td>+{{ territory.score_amount }} / {{ territory.score_interval_seconds }}s</td></tr>{% endfor %}
 </tbody></table><p id="result"></p>
 <script>
 document.querySelector('#save-color').addEventListener('click', async event => {

@@ -17,3 +17,14 @@ func TestUUIDRequestRejectsProtocolNoise(t *testing.T) {
 		t.Fatal("firmware log noise must not be treated as a protocol event")
 	}
 }
+
+func TestTreeSnapshotParsing(t *testing.T) {
+	start := treeStart.FindStringSubmatch("TREE count=2 complete=1")
+	if start == nil || start[1] != "2" {
+		t.Fatalf("tree header not parsed: %#v", start)
+	}
+	node := treeNode.FindStringSubmatch("0 aa:bb:cc:dd:ee:ff parent=11:22:33:44:55:66 parent_known=1 direct_child=1")
+	if node == nil || node[1] != "aa:bb:cc:dd:ee:ff" {
+		t.Fatalf("tree node not parsed: %#v", node)
+	}
+}
