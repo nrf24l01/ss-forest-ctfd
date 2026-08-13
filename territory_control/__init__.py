@@ -263,6 +263,7 @@ def load(app):
         )
 
     @app.post("/api/v1/territory-control/me/color")
+    @bypass_csrf_protection
     def update_team_color():
         team = current_team_or_403()
         data = request.get_json(silent=True) or request.form
