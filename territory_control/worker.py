@@ -3,9 +3,39 @@ from datetime import datetime
 import time
 
 from CTFd import create_app
-from CTFd.models import Awards, Teams, db
+from CTFd.models import Awards, Challenges, Solves, Teams, db
 
 from .models import CaptureSession, Territory, TerritoryAward
+
+
+def send_score_summary():
+    """Send a once-per-minute snapshot of captured nodes and team score."""
+    from . import send_telegram_message, setting_value
+
+    token = setting_value("telegram_bot_token").strip()
+    recipients = [item.strip() for item in setting_value("telegram_recipient_ids").replace(",", "\n").splitlines() if item.strip()]
+    if not token or not recipients:
+        return
+
+    territories = Territory.query.filter(Territory.owner_team_id.isnot(None)).order_by(Territory.owner_team_id, Territory.node_id).all()
+    if not territories:
+        return
+    lines = ["Territory score"]
+    for team_id in sorted({territory.owner_team_id for territory in territories}):
+        team = Teams.query.get(team_id)
+        if team is None:
+            continue
+        solve_score = db.session.query(db.func.coalesce(db.func.sum(Challenges.value), 0)).join(
+            Solves, Solves.challenge_id == Challenges.id
+        ).filter(Solves.team_id == team.id).scalar()
+        award_score = db.session.query(db.func.coalesce(db.func.sum(Awards.value), 0)).filter(
+            Awards.team_id == team.id
+        ).scalar()
+        lines.append(f"\n{team.name}: {int(solve_score or 0) + int(award_score or 0)} CTFd points")
+        for territory in territories:
+            if territory.owner_team_id == team.id:
+                lines.append(f"{territory.node_id}: +{territory.score_amount} / {territory.score_interval_seconds}s")
+    send_telegram_message("\n".join(lines)[:4096], token, recipients)
 
 
 def award_due_territories():
@@ -47,9 +77,13 @@ def award_due_territories():
 
 def main():
     app = create_app()
+    last_summary_at = 0.0
     while True:
         with app.app_context():
             award_due_territories()
+            if time.monotonic() - last_summary_at >= 60:
+                send_score_summary()
+                last_summary_at = time.monotonic()
         time.sleep(5)
 
 
