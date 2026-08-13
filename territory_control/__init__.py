@@ -79,6 +79,23 @@ def attack_record(territory, team_id, attack_points, prior_defense, result, note
     ))
 
 
+def team_status_rows(teams, territories):
+    identities = {identity.team_id: identity for identity in TeamIdentity.query.all()}
+    captured = {}
+    for territory in territories:
+        if territory.owner_team_id:
+            captured.setdefault(territory.owner_team_id, []).append(territory.name)
+    return [
+        {
+            "id": team.id,
+            "name": team.name,
+            "attack_points": str(identities.get(team.id).attack_points) if team.id in identities else "0",
+            "captured": captured.get(team.id, []),
+        }
+        for team in teams
+    ]
+
+
 def upgrade_schema():
     """Small additive migration for deployments created before capture timing existed."""
     columns = {column["name"] for column in inspect(db.engine).get_columns("territory_control_territories")}
@@ -226,7 +243,8 @@ def load(app):
         identity = identity_for(team.id)
         db.session.commit()
         territories = Territory.query.order_by(Territory.name).all()
-        owners = {team.id: team.name for team in Teams.query.all()}
+        teams = Teams.query.order_by(Teams.name).all()
+        owners = {team.id: team.name for team in teams}
         owner_colors = {
             territory.owner_team_id: owner_color(territory)
             for territory in territories if territory.owner_team_id
@@ -241,6 +259,7 @@ def load(app):
             owner_colors=owner_colors,
             now=datetime.utcnow(),
             availability_seconds=int(os.getenv("TERRITORY_NODE_STALE_SECONDS", "90")),
+            team_statuses=team_status_rows(teams, territories),
         )
 
     @app.post("/api/v1/territory-control/me/color")
@@ -316,13 +335,24 @@ def load(app):
         if not isinstance(nodes, list) or any(not isinstance(node, str) for node in nodes):
             return jsonify(error="nodes must be a list of node MACs"), 400
         now = datetime.utcnow()
-        territories = Territory.query.filter(
-            Territory.node_id.in_({node.lower() for node in nodes})
-        ).with_for_update().all()
+        normalized = {node.lower() for node in nodes}
+        territories = Territory.query.filter(Territory.node_id.in_(normalized)).with_for_update().all()
+        known = {territory.node_id for territory in territories}
+        for node_id in normalized - known:
+            territory = Territory(
+                node_id=node_id,
+                name=f"Node {node_id}",
+                defense_points=Decimal("0"),
+                score_amount=Decimal("1"),
+                score_interval_seconds=10,
+                last_seen_at=now,
+            )
+            db.session.add(territory)
+            territories.append(territory)
         for territory in territories:
             territory.last_seen_at = now
         db.session.commit()
-        return jsonify(updated=len(territories), observed_at=now.isoformat())
+        return jsonify(created=len(normalized - known), updated=len(territories), observed_at=now.isoformat())
 
     @app.route("/admin/territory-control", methods=["GET", "POST"])
     @admins_only
@@ -345,11 +375,12 @@ def load(app):
             except (KeyError, ValueError, IntegrityError) as error:
                 db.session.rollback()
                 teams = Teams.query.order_by(Teams.name).all()
-                return render_template_string(ADMIN_TEMPLATE, territories=Territory.query.all(), teams=teams, team_names={team.id: team.name for team in teams}, attacks=[], error=str(error)), 400
+                territories = Territory.query.all()
+                return render_template_string(ADMIN_TEMPLATE, territories=territories, teams=teams, team_names={team.id: team.name for team in teams}, team_statuses=team_status_rows(teams, territories), attacks=[], error=str(error)), 400
         territories = Territory.query.order_by(Territory.name).all()
         attacks = TerritoryAttack.query.order_by(TerritoryAttack.created_at.desc()).limit(100).all()
         teams = Teams.query.order_by(Teams.name).all()
-        return render_template_string(ADMIN_TEMPLATE, territories=territories, teams=teams, team_names={team.id: team.name for team in teams}, attacks=attacks, error=None)
+        return render_template_string(ADMIN_TEMPLATE, territories=territories, teams=teams, team_names={team.id: team.name for team in teams}, team_statuses=team_status_rows(teams, territories), attacks=attacks, error=None)
 
     @app.post("/admin/territory-control/territories/<int:territory_id>")
     @admins_only
@@ -424,9 +455,9 @@ def load(app):
 
 ADMIN_TEMPLATE = """<!doctype html><title>Territory Control</title>
 <h1>Territory Control</h1>{% if error %}<p style='color:#b00'>{{ error }}</p>{% endif %}
-<form method='post'><label>Name <input name='name' required></label> <label>Node ID <input name='node_id' required></label> <label>Defense <input name='defense_points' type='number' min='0' step='0.0001' value='0' required></label> <label>Score amount <input name='score_amount' type='number' min='0' step='1' value='0' required></label> <label>Interval seconds <input name='score_interval_seconds' type='number' min='1' value='300' required></label> <button>Create territory</button></form>
-<h2>Territories</h2><table><tr><th>Name / node</th><th>Defense / score</th><th>Owner</th><th>Settings</th></tr>{% for territory in territories %}<tr><td>{{ territory.name }}<br><small>{{ territory.node_id }}</small></td><td>{{ territory.defense_points }} defense<br>{{ territory.score_amount }} / {{ territory.score_interval_seconds }}s</td><td>{% if territory.owner_team_id %}{{ team_names.get(territory.owner_team_id, 'Deleted team') }}{% else %}Neutral{% endif %}</td><td><form method='post' action='/admin/territory-control/territories/{{ territory.id }}'><input name='name' value='{{ territory.name }}' required><input name='node_id' value='{{ territory.node_id }}' required><input name='defense_points' value='{{ territory.defense_points }}' type='number' min='0' step='0.0001' required><input name='score_amount' value='{{ territory.score_amount }}' type='number' min='0' step='1' required><input name='score_interval_seconds' value='{{ territory.score_interval_seconds }}' type='number' min='1' required><button>Save</button></form><form method='post' action='/admin/territory-control/territories/{{ territory.id }}/owner'><select name='owner_team_id'><option value=''>Neutral</option>{% for team in teams %}<option value='{{ team.id }}' {% if team.id == territory.owner_team_id %}selected{% endif %}>{{ team.name }}</option>{% endfor %}</select><button>Set owner</button></form></td></tr>{% endfor %}</table>
-<h2>Team Attack Points</h2><table><tr><th>Team</th><th>Adjustment</th></tr>{% for team in teams %}<tr><td>{{ team.name }}</td><td><form method='post' action='/admin/territory-control/teams/{{ team.id }}/attack-points'><input name='delta' type='number' step='0.0001' placeholder='+/- AP' required><button>Apply</button></form></td></tr>{% endfor %}</table>
+<p>Territories are added automatically when a root reports them through <code>tree</code>. New nodes award <strong>1 CTFd point every 10 seconds</strong>.</p>
+<h2>Territories</h2><table><tr><th>Name / node</th><th>Defense / score</th><th>Status / captured by</th><th>Settings</th></tr>{% for territory in territories %}<tr><td>{{ territory.name }}<br><small>{{ territory.node_id }}</small></td><td>{{ territory.defense_points }} defense<br>{{ territory.score_amount }} / {{ territory.score_interval_seconds }}s</td><td>{% if territory.owner_team_id %}Captured by {{ team_names.get(territory.owner_team_id, 'Deleted team') }}{% else %}Not captured{% endif %}</td><td><form method='post' action='/admin/territory-control/territories/{{ territory.id }}'><input name='name' value='{{ territory.name }}' required><input name='node_id' value='{{ territory.node_id }}' required><input name='defense_points' value='{{ territory.defense_points }}' type='number' min='0' step='0.0001' required><input name='score_amount' value='{{ territory.score_amount }}' type='number' min='0' step='1' required><input name='score_interval_seconds' value='{{ territory.score_interval_seconds }}' type='number' min='1' required><button>Save</button></form><form method='post' action='/admin/territory-control/territories/{{ territory.id }}/owner'><select name='owner_team_id'><option value=''>Neutral</option>{% for team in teams %}<option value='{{ team.id }}' {% if team.id == territory.owner_team_id %}selected{% endif %}>{{ team.name }}</option>{% endfor %}</select><button>Set owner</button></form></td></tr>{% endfor %}</table>
+<h2>Team Attack Points and Captures</h2><table><tr><th>Team</th><th>AP</th><th>Status</th><th>Adjustment</th></tr>{% for status in team_statuses %}<tr><td>{{ status.name }}</td><td>{{ status.attack_points }}</td><td>{% if status.captured %}Captured: {{ status.captured|join(', ') }}{% else %}No territories captured{% endif %}</td><td><form method='post' action='/admin/territory-control/teams/{{ status.id }}/attack-points'><input name='delta' type='number' step='0.0001' placeholder='+/- AP' required><button>Apply</button></form></td></tr>{% endfor %}</table>
 <h2>Recent Territory Events</h2><table><tr><th>Time</th><th>Territory</th><th>Team</th><th>AP</th><th>Result</th></tr>{% for attack in attacks %}<tr><td>{{ attack.created_at }}</td><td>#{{ attack.territory_id }}</td><td>{{ team_names.get(attack.team_id, 'Admin') }}</td><td>{{ attack.attack_points }}</td><td>{{ attack.result }}{% if attack.note %}: {{ attack.note }}{% endif %}</td></tr>{% endfor %}</table>"""
 
 
@@ -455,6 +486,7 @@ input, button { padding: .5rem; font: inherit; } button { background: #0b6e4f; c
 <table><thead><tr><th>Territory</th><th>Node</th><th>Owner</th><th>Captured</th><th>Defense</th><th>CTFd yield</th></tr></thead><tbody>
 {% for territory in territories %}<tr><td>{{ territory.name }}</td><td>{{ territory.node_id }}<br><small>{% if territory.last_seen_at and (now - territory.last_seen_at).total_seconds() <= availability_seconds %}Available{% else %}Unavailable{% endif %}</small></td><td>{% if territory.owner_team_id %}<span style="display:inline-block;width:1em;height:1em;background:#{{ owner_colors[territory.owner_team_id] }};border:1px solid #333"></span> {{ owners.get(territory.owner_team_id, 'Deleted team') }}{% else %}Neutral{% endif %}</td><td>{% if territory.captured_at %}{{ (now - territory.captured_at).total_seconds()|int }} seconds{% else %}-{% endif %}</td><td>{{ territory.defense_points }}</td><td>+{{ territory.score_amount }} / {{ territory.score_interval_seconds }}s</td></tr>{% endfor %}
 </tbody></table><p id="result"></p>
+<h2>Team Status</h2><table><thead><tr><th>Team</th><th>Attack Points</th><th>Territory status</th></tr></thead><tbody>{% for status in team_statuses %}<tr><td>{{ status.name }}</td><td>{{ status.attack_points }}</td><td>{% if status.captured %}Captured: {{ status.captured|join(', ') }}{% else %}Not captured{% endif %}</td></tr>{% endfor %}</tbody></table>
 <script>
 document.querySelector('#save-color').addEventListener('click', async event => {
   const result = document.querySelector('#result');
