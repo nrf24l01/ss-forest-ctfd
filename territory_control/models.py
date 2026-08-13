@@ -29,10 +29,11 @@ class Territory(db.Model):
     node_id = db.Column(db.String(128), unique=True, nullable=False)
     name = db.Column(db.String(128), nullable=False)
     owner_team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
-    defense_points = db.Column(POINTS, nullable=False, default=Decimal("1"))
+    defense_points = db.Column(POINTS, nullable=False, default=Decimal("0"))
     score_amount = db.Column(POINTS, nullable=False, default=Decimal("0"))
     score_interval_seconds = db.Column(db.Integer, nullable=False, default=300)
     last_awarded_at = db.Column(db.DateTime, nullable=True)
+    captured_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
@@ -64,3 +65,17 @@ class TerritoryAward(db.Model):
     territory_id = db.Column(db.Integer, db.ForeignKey("territory_control_territories.id"), nullable=False)
     awarded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     ctfd_award_id = db.Column(db.Integer, db.ForeignKey("awards.id"), unique=True, nullable=False)
+
+
+class TerritoryAttack(db.Model):
+    """Immutable audit trail for serial attacks and administrator changes."""
+    __tablename__ = "territory_control_attacks"
+    id = db.Column(db.Integer, primary_key=True)
+    territory_id = db.Column(db.Integer, db.ForeignKey("territory_control_territories.id"), nullable=False, index=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
+    attack_points = db.Column(POINTS, nullable=False, default=Decimal("0"))
+    prior_defense_points = db.Column(POINTS, nullable=False, default=Decimal("0"))
+    defense_points = db.Column(POINTS, nullable=False, default=Decimal("0"))
+    result = db.Column(db.String(32), nullable=False)
+    note = db.Column(db.String(256), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

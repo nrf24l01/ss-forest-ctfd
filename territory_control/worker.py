@@ -21,7 +21,8 @@ def award_due_territories():
     for territory in territories:
         if territory.score_amount <= 0:
             continue
-        if territory.last_awarded_at and (now - territory.last_awarded_at).total_seconds() < territory.score_interval_seconds:
+        award_anchor = territory.last_awarded_at or territory.captured_at
+        if award_anchor and (now - award_anchor).total_seconds() < territory.score_interval_seconds:
             continue
         team = Teams.query.filter_by(id=territory.owner_team_id).first()
         recipient_id = team.captain_id if team else None

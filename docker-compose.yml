@@ -24,25 +24,22 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
-  territory-device-driver:
+  serial-worker:
     build:
       context: .
-      dockerfile: territory_device_driver/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
+      dockerfile: serial_worker/Dockerfile
     command:
       - --server
       - http://ctfd:8000
       - --secret
       - ${TERRITORY_DEVICE_SECRET:?set this in .env}
-      - --node-id
-      - ${TERRITORY_NODE_ID:?set the territory node MAC in .env}
       - --port
       - ${SERIAL_PORT:-/dev/ttyUSB0}
       - --baud
       - ${SERIAL_BAUD:-115200}
     devices:
       - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
+    profiles: [hardware]
     depends_on:
       - ctfd
   mariadb:

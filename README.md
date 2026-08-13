@@ -11,45 +11,42 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for installation, device-driver setup, player
 3. Open `http://localhost:8000`, complete CTFd setup, then create territories at `/admin/territory-control`.
 4. Create challenges with type **Territory Attack Points**. Their `Attack Points` field credits team AP; their CTFd value is always zero.
 
-The `territory-device-driver` service requires a real `SERIAL_PORT` and `TERRITORY_NODE_ID`. For development without physical hardware, omit that service:
+The `serial-worker` service requires a real `SERIAL_PORT`. For development without physical hardware, omit that service:
 
 ```sh
 docker compose up --build ctfd territory-worker mariadb redis
 ```
 
-## Device protocol
+## Serial worker protocol
 
-The CTFd plugin and serial-controller driver are separate processes. They use an authenticated, database-backed HTTP command channel, which is compatible with the stock CTFd Gunicorn deployment without requiring a WebSocket server:
+The standalone Go `serial-worker` can run on the serial-device host, separate from CTFd. It uses an authenticated HTTPS API and does not access the CTFd database or filesystem:
 
-1. The driver polls `GET /api/v1/territory-control/device/commands?node_id=<node>`.
-2. Starting an attack queues a `start_scan` command for that node.
-3. The driver sends its configured scan command to the physical root controller.
-4. A root `UUID_REQUEST` is posted back to CTFd, and the returned color is written to serial.
-
-Run the independent driver from `territory_device_driver/`; it does not import CTFd or share its filesystem.
+1. The root emits `UUID_REQUEST` with its node MAC, a team UUID, and `attack_points`.
+2. The worker posts that event to CTFd with `X-Territory-Secret`.
+3. CTFd validates and spends stored team AP, resolves combat, and returns an action.
+4. The worker sends `color <node_mac> <#RRGGBB>` or `reject <node_mac>` according to `PROTO-SERIAL.md`.
 
 The root/device emits:
 
 ```text
-UUID_REQUEST session=1 node=aa:bb:cc:dd:ee:ff uuid=<team-uuid>
+UUID_REQUEST session=1 node=aa:bb:cc:dd:ee:ff uuid=<team-uuid> attack_points=42
 ```
 
-`node` must match the Territory `Node ID` configured by an admin. The bridge posts the scan to CTFd and replies:
+`node` must match a Territory `Node ID` configured by an admin. The worker replies:
 
 ```text
-color RRGGBB
+color aa:bb:cc:dd:ee:ff #RRGGBB
 ```
 
-Black (`000000`) means neutral, expired/no pending capture, an invalid scan, or an API failure.
+It sends `reject aa:bb:cc:dd:ee:ff` for invalid UUIDs, insufficient AP, or API failures.
 
 ## Attack flow
 
-1. A signed-in player calls `POST /api/v1/territory-control/attacks` with `territory_id` and decimal `attack_points`.
-2. The requested AP is reserved for 30 seconds.
-3. The device must scan the matching team QR UUID during the reservation.
-4. On a match, `remaining = old_defense * TERRITORY_DEFENSE_MULTIPLIER - spent_ap * TERRITORY_ATTACK_MULTIPLIER`.
+1. A physical node sends CTFd a `UUID_REQUEST` through the serial worker.
+2. CTFd checks the QR UUID's team has at least the firmware-provided attack points.
+3. Valid attempts spend those stored AP and use `remaining = old_defense * TERRITORY_DEFENSE_MULTIPLIER - spent_ap * TERRITORY_ATTACK_MULTIPLIER`.
 5. Positive remaining defense stays with the current owner. Zero becomes neutral/black. A negative result becomes the attacking team's defense using its absolute value.
-6. An expired reservation is refunded by the worker. A mismatched scan leaves the valid reservation pending until its matching scan or expiry.
+6. Failed valid attacks still spend AP and return the current owner's color.
 
 Final Score payout amounts must be whole numbers because CTFd's native `Awards.value` column is integer-only. Combat values, Attack Points, and both multipliers remain decimal.
 
